@@ -2,8 +2,10 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
   <title>PopupView v6 — Bugs in the Woods</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   <style>
     body { margin: 0; overflow: hidden; }
     #loading {
@@ -12,28 +14,26 @@
       background: #1a1a2e; color: white; font-family: system-ui, sans-serif;
       z-index: 2000; text-align: center; flex-direction: column;
     }
-    #loading h1 { color: #00d4ff; font-size: 1.4em; margin-bottom: 8px; }
-    #loading p { font-size: 0.95em; opacity: 0.8; max-width: 300px; }
+    #loading h1 { color: #00d4ff; font-size: 1.3em; }
     #loading .spinner {
-      width: 40px; height: 40px; border: 3px solid #333;
+      width: 36px; height: 36px; border: 3px solid #333;
       border-top-color: #00d4ff; border-radius: 50%;
-      animation: spin 0.8s linear infinite; margin: 20px auto;
+      animation: spin 0.8s linear infinite; margin: 16px auto;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     #loading.hidden { display: none; }
     #info {
       position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.7); color: white; padding: 8px 16px;
+      background: rgba(0,0,0,0.75); color: white; padding: 8px 16px;
       border-radius: 20px; font-family: system-ui, sans-serif; font-size: 13px;
-      z-index: 100; pointer-events: none;
+      z-index: 100; pointer-events: none; white-space: nowrap;
     }
-    #tracking-status {
-      position: fixed; top: 20px; right: 20px;
+    #dot {
+      position: fixed; top: 16px; right: 16px;
       width: 12px; height: 12px; border-radius: 50%;
-      background: #ff4444; z-index: 100;
-      transition: background 0.3s;
+      background: #f44; z-index: 100; transition: background 0.3s;
     }
-    #tracking-status.tracking { background: #00ff88; }
+    #dot.on { background: #0f8; }
   </style>
 </head>
 <body>
@@ -41,173 +41,77 @@
   <div id="loading">
     <h1>Bugs in the Woods</h1>
     <div class="spinner"></div>
-    <p id="loading-status">Preparing AR experience...</p>
+    <p>Starting AR camera...</p>
   </div>
 
-  <div id="tracking-status"></div>
+  <div id="dot"></div>
   <div id="info">Scanning for trigger image...</div>
 
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/",
-      "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.mjs",
-      "mindar-image": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.mjs"
-    }
-  }
-  </script>
+  <a-scene
+    mindar-image="imageTargetSrc: assets/targets.mind; autoStart: true; uiLoading: no; uiError: no; uiScanning: no;"
+    color-space="sRGB"
+    renderer="colorManagement: true; physicallyCorrectLights: true;"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-assets>
+      <img id="bug-img" src="assets/bug-texture-small.jpg" crossorigin="anonymous">
+    </a-assets>
 
-  <script type="module">
-    import * as THREE from 'three';
-    import { MindARThree } from 'mindar-image-three';
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    const loadingStatus = document.getElementById('loading-status');
-    const loadingScreen = document.getElementById('loading');
+    <a-entity mindar-image-target="targetIndex: 0">
+      <!-- Bug texture on a plane, floating above the trigger -->
+      <a-image
+        src="#bug-img"
+        position="0 0 0.05"
+        width="0.6"
+        height="0.6"
+        opacity="1"
+        animation="property: position; to: 0 0.02 0.05; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"
+        animation__rot="property: rotation; to: 0 0 5; dur: 3000; easing: easeInOutSine; loop: true; dir: alternate"
+      ></a-image>
 
-    const start = async () => {
-      // Step 1: Check for pre-compiled target, or compile on-the-fly
-      let targetSrc = 'assets/targets.mind';
+      <!-- Species label -->
+      <a-text
+        value="Graphosoma lineatum"
+        color="#00d4ff"
+        align="center"
+        position="0 -0.35 0.05"
+        width="1.2"
+        font="roboto"
+      ></a-text>
 
-      try {
-        const check = await fetch(targetSrc);
-        if (!check.ok) throw new Error('not found');
-        loadingStatus.textContent = 'Loading AR target...';
-      } catch {
-        // No pre-compiled file — compile from trigger image
-        loadingStatus.textContent = 'Compiling trigger image (first time only)...';
+      <!-- Green glow circle underneath -->
+      <a-circle
+        color="#00ff88"
+        radius="0.32"
+        opacity="0.12"
+        position="0 0 0.005"
+        animation="property: opacity; to: 0.06; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"
+      ></a-circle>
+    </a-entity>
+  </a-scene>
 
-        const { MindARImageCompiler } = await import('mindar-image');
+  <script>
+    // Hide loading screen when AR starts
+    const scene = document.querySelector('a-scene');
+    scene.addEventListener('arReady', () => {
+      document.getElementById('loading').classList.add('hidden');
+    });
+    scene.addEventListener('arError', (e) => {
+      document.querySelector('#loading p').textContent = 'AR Error: ' + (e.detail || 'Check console');
+    });
 
-        // Load trigger image
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        await new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = reject;
-          img.src = 'assets/trigger.png';
-        });
-
-        loadingStatus.textContent = 'Compiling target (this takes ~30s)...';
-
-        const compiler = new MindARImageCompiler();
-        await compiler.compileImageTargets([img], (progress) => {
-          loadingStatus.textContent = `Compiling: ${Math.round(progress)}%`;
-        });
-
-        const buffer = await compiler.exportData();
-        // Use compiled data as a blob URL
-        const blob = new Blob([buffer], { type: 'application/octet-stream' });
-        targetSrc = URL.createObjectURL(blob);
-      }
-
-      loadingStatus.textContent = 'Starting camera...';
-
-      // Step 2: Initialize MindAR with the target
-      const mindarThree = new MindARThree({
-        container: document.body,
-        imageTargetSrc: targetSrc,
-      });
-
-      const { renderer, scene, camera } = mindarThree;
-
-      // Lighting
-      scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-      dirLight.position.set(0.5, 1, 0.5);
-      scene.add(dirLight);
-
-      // Create anchor for the trigger image
-      const anchor = mindarThree.addAnchor(0);
-
-      // Load bug texture
-      const textureLoader = new THREE.TextureLoader();
-      const bugTexture = await new Promise((resolve) => {
-        textureLoader.load('assets/bug-texture.png', resolve);
-      });
-
-      // Bug group
-      const bugGroup = new THREE.Group();
-
-      // Bug texture on a plane
-      const bugPlane = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.6, 0.6),
-        new THREE.MeshStandardMaterial({
-          map: bugTexture,
-          transparent: true,
-          side: THREE.DoubleSide,
-          metalness: 0.3,
-          roughness: 0.5,
-        })
-      );
-      bugPlane.position.set(0, 0.1, 0.05);
-      bugGroup.add(bugPlane);
-
-      // Glow underneath
-      const glowMaterial = new THREE.MeshBasicMaterial({
-        color: 0x00ff88, transparent: true, opacity: 0.15,
-      });
-      const glowPlane = new THREE.Mesh(new THREE.CircleGeometry(0.35, 32), glowMaterial);
-      glowPlane.position.set(0, 0.1, 0.001);
-      bugGroup.add(glowPlane);
-
-      // Species label
-      const labelCanvas = document.createElement('canvas');
-      labelCanvas.width = 512;
-      labelCanvas.height = 64;
-      const ctx = labelCanvas.getContext('2d');
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.beginPath();
-      ctx.roundRect(0, 0, 512, 64, 12);
-      ctx.fill();
-      ctx.fillStyle = '#00d4ff';
-      ctx.font = 'italic 28px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('Graphosoma lineatum', 256, 42);
-      const label = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.5, 0.0625),
-        new THREE.MeshBasicMaterial({
-          map: new THREE.CanvasTexture(labelCanvas),
-          transparent: true,
-          side: THREE.DoubleSide,
-        })
-      );
-      label.position.set(0, -0.18, 0.05);
-      bugGroup.add(label);
-
-      anchor.group.add(bugGroup);
-
-      // UI updates on tracking
-      const info = document.getElementById('info');
-      const statusDot = document.getElementById('tracking-status');
-
-      anchor.onTargetFound = () => {
-        info.textContent = 'Graphosoma lineatum — Shield Bug';
-        statusDot.classList.add('tracking');
-      };
-      anchor.onTargetLost = () => {
-        info.textContent = 'Scanning for trigger image...';
-        statusDot.classList.remove('tracking');
-      };
-
-      // Animation loop
-      const clock = new THREE.Clock();
-      renderer.setAnimationLoop(() => {
-        const t = clock.getElapsedTime();
-        bugPlane.position.y = 0.1 + Math.sin(t * 1.5) * 0.015;
-        bugPlane.rotation.z = Math.sin(t * 0.8) * 0.1;
-        glowMaterial.opacity = 0.1 + Math.sin(t * 2) * 0.05;
-        renderer.render(scene, camera);
-      });
-
-      // Start AR and hide loading screen
-      await mindarThree.start();
-      loadingScreen.classList.add('hidden');
-    };
-
-    start().catch((err) => {
-      console.error('AR failed to start:', err);
-      loadingStatus.textContent = 'Error: ' + err.message;
+    // Track target found/lost
+    const target = document.querySelector('[mindar-image-target]');
+    target.addEventListener('targetFound', () => {
+      document.getElementById('info').textContent = 'Graphosoma lineatum — Shield Bug';
+      document.getElementById('dot').classList.add('on');
+    });
+    target.addEventListener('targetLost', () => {
+      document.getElementById('info').textContent = 'Scanning for trigger image...';
+      document.getElementById('dot').classList.remove('on');
     });
   </script>
 </body>
