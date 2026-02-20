@@ -55,22 +55,25 @@
     device-orientation-permission-ui="enabled: false"
   >
     <a-assets>
-      <img id="bug-img" src="assets/bug-texture-small.jpg" crossorigin="anonymous">
+      <a-asset-item id="bug-model" src="assets/bug-model.glb"></a-asset-item>
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
+    <!-- Lighting for 3D model -->
+    <a-light type="ambient" color="#fff" intensity="0.8"></a-light>
+    <a-light type="directional" color="#fff" intensity="0.6" position="0 1 1"></a-light>
+
     <a-entity mindar-image-target="targetIndex: 0">
-      <!-- Bug texture on a plane, floating above the trigger -->
-      <a-image
-        src="#bug-img"
-        position="0 0 0.05"
-        width="0.6"
-        height="0.6"
-        opacity="1"
-        animation="property: position; to: 0 0.02 0.05; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"
-        animation__rot="property: rotation; to: 0 0 5; dur: 3000; easing: easeInOutSine; loop: true; dir: alternate"
-      ></a-image>
+      <!-- 3D bug model floating above the trigger -->
+      <a-gltf-model
+        src="#bug-model"
+        position="0 0 0.1"
+        scale="0.3 0.3 0.3"
+        rotation="-90 0 0"
+        animation="property: position; to: 0 0.03 0.1; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate"
+        animation__rot="property: rotation; from: -90 0 0; to: -90 360 0; dur: 8000; easing: linear; loop: true"
+      ></a-gltf-model>
 
       <!-- Species label -->
       <a-text
