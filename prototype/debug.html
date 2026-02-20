@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debug — PopupView AR</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; background: #111; color: #eee; font-size: 14px; }
+    .ok { color: #0f0; } .fail { color: #f44; } .warn { color: #ff0; }
+    pre { background: #222; padding: 10px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+    button { background: #00d4ff; color: #000; border: none; padding: 10px 20px; border-radius: 4px; font-size: 16px; margin: 5px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h2>PopupView AR — Debug</h2>
+  <pre id="log"></pre>
+  <button onclick="testCompiler()">Test Compiler</button>
+  <button onclick="testAR()">Test AR (needs .mind file)</button>
+  <button onclick="testSimple()">Test Simple AR (no image tracking)</button>
+
+  <script>
+    const log = document.getElementById('log');
+    function msg(text, cls) {
+      const span = document.createElement('span');
+      span.className = cls || '';
+      span.textContent = text + '\n';
+      log.appendChild(span);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Basic checks on load
+    (async () => {
+      msg('=== Environment ===');
+      msg('UserAgent: ' + navigator.userAgent);
+      msg('HTTPS: ' + (location.protocol === 'https:' ? 'Yes' : 'No'), location.protocol === 'https:' ? 'ok' : 'fail');
+
+      // Check camera
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        stream.getTracks().forEach(t => t.stop());
+        msg('Camera: Available', 'ok');
+      } catch(e) {
+        msg('Camera: ' + e.message, 'fail');
+      }
+
+      // Check WebGL
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      msg('WebGL: ' + (gl ? gl.getParameter(gl.VERSION) : 'Not available'), gl ? 'ok' : 'fail');
+
+      // Check assets
+      msg('\n=== Assets ===');
+      for (const file of ['assets/trigger.png', 'assets/bug-texture.png', 'assets/targets.mind']) {
+        try {
+          const r = await fetch(file, { method: 'HEAD' });
+          const size = r.headers.get('content-length');
+          msg(file + ': ' + (r.ok ? `OK (${(size/1024/1024).toFixed(1)}MB)` : r.status), r.ok ? 'ok' : 'warn');
+        } catch(e) {
+          msg(file + ': ' + e.message, 'fail');
+        }
+      }
+
+      // Check CDN imports
+      msg('\n=== CDN Modules ===');
+      try {
+        await import('https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js');
+        msg('Three.js: Loaded', 'ok');
+      } catch(e) {
+        msg('Three.js: ' + e.message, 'fail');
+      }
+
+      try {
+        const mod = await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.mjs');
+        msg('MindAR Three: Loaded (exports: ' + Object.keys(mod).join(', ') + ')', 'ok');
+      } catch(e) {
+        msg('MindAR Three: ' + e.message, 'fail');
+      }
+
+      try {
+        const mod = await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.mjs');
+        msg('MindAR Image: Loaded (exports: ' + Object.keys(mod).join(', ') + ')', 'ok');
+      } catch(e) {
+        msg('MindAR Image: ' + e.message, 'fail');
+      }
+    })();
+
+    async function testCompiler() {
+      msg('\n=== Compiler Test ===');
+      try {
+        msg('Importing MindAR compiler...');
+        const mod = await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.mjs');
+        msg('Module exports: ' + Object.keys(mod).join(', '));
+
+        const Compiler = mod.MindARImageCompiler || mod.Compiler || mod.default;
+        if (!Compiler) {
+          msg('MindARImageCompiler not found in exports!', 'fail');
+          msg('Available: ' + JSON.stringify(Object.keys(mod)));
+          return;
+        }
+        msg('Compiler class found', 'ok');
+
+        msg('Loading trigger image...');
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = 'assets/trigger.png'; });
+        msg('Image loaded: ' + img.width + 'x' + img.height, 'ok');
+
+        msg('Compiling (this takes 30-60s)...');
+        const compiler = new Compiler();
+        await compiler.compileImageTargets([img], (p) => {
+          msg('Progress: ' + Math.round(p) + '%');
+        });
+
+        const buffer = await compiler.exportData();
+        msg('Compiled! Size: ' + (buffer.byteLength / 1024).toFixed(0) + 'KB', 'ok');
+
+        // Auto-download
+        const blob = new Blob([buffer], { type: 'application/octet-stream' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'targets.mind';
+        a.click();
+        msg('Download triggered!', 'ok');
+      } catch(e) {
+        msg('Compiler error: ' + e.message, 'fail');
+        msg(e.stack, 'fail');
+      }
+    }
+
+    async function testAR() {
+      msg('\n=== AR Test ===');
+      try {
+        const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js');
+        const { MindARThree } = await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.mjs');
+
+        msg('Creating MindAR instance...');
+        const mindar = new MindARThree({
+          container: document.body,
+          imageTargetSrc: 'assets/targets.mind',
+        });
+
+        const anchor = mindar.addAnchor(0);
+        const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+        anchor.group.add(new THREE.Mesh(geo, mat));
+
+        msg('Starting AR...');
+        await mindar.start();
+        msg('AR started! Point at trigger image.', 'ok');
+
+        mindar.renderer.setAnimationLoop(() => {
+          mindar.renderer.render(mindar.scene, mindar.camera);
+        });
+      } catch(e) {
+        msg('AR error: ' + e.message, 'fail');
+        msg(e.stack, 'fail');
+      }
+    }
+
+    async function testSimple() {
+      msg('\n=== Simple Camera Test ===');
+      try {
+        const video = document.createElement('video');
+        video.setAttribute('playsinline', '');
+        video.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:-1;';
+        document.body.appendChild(video);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = stream;
+        await video.play();
+        msg('Camera feed active!', 'ok');
+      } catch(e) {
+        msg('Camera error: ' + e.message, 'fail');
+      }
+    }
+  </script>
+</body>
+</html>
